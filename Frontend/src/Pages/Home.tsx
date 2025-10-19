@@ -105,7 +105,7 @@ function stopSpeaking() {
     setTyping(true);
 
     try {
-      const res = await fetch("https://ai-agent-1vjl.vercel.app/api/chat", { method: "POST", body: formData });
+      const res = await fetch("https://ai-agent-1vjl.vercel.app/", { method: "POST", body: formData });
       const data = await res.json();
       const fullText = typeof data.reply === "string" ? data.reply : JSON.stringify(data.reply, null, 2);
 
