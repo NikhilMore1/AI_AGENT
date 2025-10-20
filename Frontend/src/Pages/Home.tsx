@@ -105,7 +105,7 @@ function stopSpeaking() {
     setTyping(true);
 
     try {
-      const res = await fetch("https://ai-agent-1vjl.vercel.app/", { method: "POST", body: formData });
+      const res = await fetch("http://localhost:5000/api/chat", { method: "POST", body: formData });
       const data = await res.json();
       const fullText = typeof data.reply === "string" ? data.reply : JSON.stringify(data.reply, null, 2);
 
@@ -157,7 +157,7 @@ function stopSpeaking() {
 
   // ===== WebSocket =====
   useEffect(() => {
-    const socket = new WebSocket("ws://https://ai-agent-1vjl.vercel.app/");
+    const socket = new WebSocket("ws://localhost:5000");
     setWs(socket);
 
     socket.onmessage = (event) => {
