@@ -105,7 +105,7 @@ function stopSpeaking() {
     setTyping(true);
 
     try {
-      const res = await fetch("https://ai-agent-1vjl-ieasiagia-nikhil-mores-projects-4881d171.vercel.app/api/chat", { method: "POST", body: formData });
+      const res = await fetch("https://agent-backend-pocx.onrender.com/api/chat", { method: "POST", body: formData });
       const data = await res.json();
       const fullText = typeof data.reply === "string" ? data.reply : JSON.stringify(data.reply, null, 2);
 
@@ -157,7 +157,7 @@ function stopSpeaking() {
 
   // ===== WebSocket =====
   useEffect(() => {
-    const socket = new WebSocket("wss://ai-agent-1vjl-ieasiagia-nikhil-mores-projects-4881d171.vercel.app/");
+    const socket = new WebSocket("wss://agent-backend-pocx.onrender.com/");
     setWs(socket);
 
     socket.onmessage = (event) => {
