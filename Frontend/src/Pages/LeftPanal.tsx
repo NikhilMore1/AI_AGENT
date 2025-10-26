@@ -11,18 +11,18 @@ const LeftPanel = ({ onSelectChat, currentChatId, onNewChat }) => {
     setChats(stored);
   }, []);
 
-  // Function to select a chat
   const handleSelectChat = (id) => {
     onSelectChat(id);
   };
 
   return (
     <motion.div
-      className="w-full md:w-1/4 bg-gradient-to-b from-gray-900 to-gray-800 text-white flex flex-col p-4 rounded-2xl shadow-xl overflow-y-auto"
+      className="fixed top-0 left-0 h-full w-full md:w-1/4 bg-gradient-to-b from-gray-900 to-gray-800 text-white flex flex-col p-4 shadow-xl overflow-y-auto rounded-none md:rounded-r-2xl z-20"
       initial={{ x: -80, opacity: 0 }}
       animate={{ x: 0, opacity: 1 }}
       transition={{ duration: 0.6 }}
     >
+      {/* Header */}
       <div className="flex justify-between items-center mb-5">
         <h2 className="text-xl font-bold tracking-wide">Chat History</h2>
         <button
@@ -33,6 +33,7 @@ const LeftPanel = ({ onSelectChat, currentChatId, onNewChat }) => {
         </button>
       </div>
 
+      {/* Chat List */}
       {chats.length === 0 ? (
         <p className="text-gray-400 text-sm italic mt-10 text-center">
           No previous chats

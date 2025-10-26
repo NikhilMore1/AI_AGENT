@@ -9,11 +9,14 @@ import { WebSocketServer } from "ws";
 import tesseract from "node-tesseract-ocr";
 import fs from "fs";
 import path from "path";
-
+import dbCOnnect from "./Connections/dbConnection.js";
 dotenv.config();
+import registerUsers from './Routes/auth/Registration.routes.js';
 
 const app = express();
 app.use(cors());
+app.use(express.json());
+app.use(express.urlencoded({extended:true}));
 
 // ===== Multer setup for file uploads =====
 const upload = multer({ dest: "uploads/" });
@@ -147,6 +150,16 @@ wss.on("connection", (ws) => {
 });
 
 // ===== Start Server =====
-const PORT = 5000;
-server.listen(PORT, () => console.log(`✅ Server running on http://localhost:${PORT}`));
-    
+dbCOnnect()
+.then(()=>{
+  console.log("Database connection established ");
+  
+  server.listen(process.env.PORT, () => console.log(`✅ Server running on http://localhost:${process.env.PORT}`));
+})
+.catch((error)=>{
+  console.log("Database connection error");
+  
+})
+
+
+app.use('/api',registerUsers);

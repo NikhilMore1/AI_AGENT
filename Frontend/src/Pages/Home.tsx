@@ -173,7 +173,7 @@ function stopSpeaking() {
   return (
     <div className="flex flex-col h-screen bg-gradient-to-br from-gray-950 via-purple-950 to-black text-white p-4">
       <h1 className="text-4xl font-extrabold mb-6 text-center text-purple-400 drop-shadow-lg animate-pulse tracking-wide">
-        <span className="text-pink-400">Nexus</span> AI Assistant 🤖
+        <span className="text-pink-400">Exon</span> AI Assistant 🤖
       </h1>
 
       {/* Chat Window */}
