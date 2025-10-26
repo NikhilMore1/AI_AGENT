@@ -28,7 +28,7 @@ const handleSubmit = async (e: React.FormEvent) => {
   // const { confirmPassword, ...userData } = datas; // remove confirmPassword
 
   try {
-    const response = await axios.post("http://localhost:5000/api/register", datas, {
+    const response = await axios.post("https://agent-backend-pocx.onrender.com/api/register", datas, {
       headers: { "Content-Type": "application/json" },
     });
     console.log("✅ Response:", response.data);
