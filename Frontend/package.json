@@ -10,10 +10,14 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@google/generative-ai": "^0.24.1",
+    "@livekit/components-react": "^2.9.15",
+    "@livekit/components-styles": "^1.1.6",
     "@tailwindcss/vite": "^4.1.14",
     "axios": "^1.12.2",
     "framer-motion": "^12.23.24",
     "highlight.js": "^11.11.1",
+    "livekit-client": "^2.15.14",
     "lucide-react": "^0.546.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",

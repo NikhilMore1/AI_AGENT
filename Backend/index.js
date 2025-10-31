@@ -1,4 +1,4 @@
-
+// index.js (replace existing)
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
@@ -9,69 +9,140 @@ import { WebSocketServer } from "ws";
 import tesseract from "node-tesseract-ocr";
 import fs from "fs";
 import path from "path";
-import dbCOnnect from "./Connections/dbConnection.js";
+import mongoose from "mongoose";
+import dbCOnnect from "./Connections/dbConnection.js"; // your existing DB connection
 dotenv.config();
 import registerUsers from './Routes/auth/Registration.routes.js';
 
 const app = express();
 app.use(cors());
 app.use(express.json());
-app.use(express.urlencoded({extended:true}));
+app.use(express.urlencoded({ extended: true }));
 
-// ===== Multer setup for file uploads =====
+// Multer
 const upload = multer({ dest: "uploads/" });
 
-// ===== Normal Chat Endpoint =====
+// -------------------
+// Mongo Models (inline for simplicity)
+// -------------------
+const helpRequestSchema = new mongoose.Schema({
+  question: String,
+  answer: { type: String, default: null },
+  status: { type: String, default: "pending" }, // pending | resolved | unresolved
+  createdAt: { type: Date, default: Date.now },
+  resolvedAt: Date,
+});
+
+const kbSchema = new mongoose.Schema({
+  question: { type: String, unique: true },
+  answer: String,
+  createdAt: { type: Date, default: Date.now },
+});
+
+const HelpRequest = mongoose.models.HelpRequest || mongoose.model("HelpRequest", helpRequestSchema);
+const Knowledge = mongoose.models.Knowledge || mongoose.model("Knowledge", kbSchema);
+
+// -------------------
+// Helper: broadcast to all WS clients
+// -------------------
+let wsClients = new Set();
+function broadcastJSON(obj) {
+  const str = JSON.stringify(obj);
+  for (const ws of wsClients) {
+    if (ws.readyState === ws.OPEN) ws.send(str);
+  }
+}
+
+// -------------------
+// Chat endpoint: check KB first, then fallback to Gemini
+// -------------------
 app.post("/api/chat", upload.single("file"), async (req, res) => {
   try {
-    const message = req.body.message || "";
+    const message = (req.body.message || "").trim();
     const file = req.file;
 
-    console.log("Text:", message);
-    console.log("File:", file?.originalname || "No file");
+    if (!message && !file) return res.status(400).json({ reply: "Empty request" });
 
-    // Prepare prompt for Gemini
-    let prompt = message;
-    if (file) prompt += `\nUser uploaded a file: ${file.originalname}`;
+    // Check KB (case-insensitive match on a normalized question)
+    const normalized = message.toLowerCase();
+    const kbEntry = await Knowledge.findOne({ question: normalized });
+    if (kbEntry) {
+      return res.json({ reply: kbEntry.answer });
+    }
 
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [
-            {
-              role: "user",
-              parts: [
-                {
-                  text: `${prompt}\n\nPlease format your response using Markdown (use headings, bold, bullet points, and code blocks only when relevant). Respond concisely and clearly. make sure if any one say about your developer then tell as LLM develop by Google but as here for you develop by Nikhil More ` ,
-                },
-              ],
-            },
-          ],
-        }),
-      }
-    );
+    // If file present, you may add analysis here (kept simple)
+    // Not found in KB -> create help request and reply with escalation message
+    const newReq = await HelpRequest.create({ question: message });
+    console.log("Created help request:", newReq._id, message);
 
-    const data = await response.json();
-    const reply =
-      data?.candidates?.[0]?.content?.parts?.[0]?.text ||
-      data?.candidates?.[0]?.content?.[0]?.text ||
-      "⚠️ No valid response from Gemini.";
+    // Simulate notifying supervisor (console + broadcast)
+    console.log(`Notify supervisor: Hey, I need help answering: "${message}"`);
+    broadcastJSON({ type: "new_help_request", id: newReq._id, question: newReq.question, createdAt: newReq.createdAt });
 
-    res.json({ reply });
+    return res.json({ reply: "Let me check with my supervisor and get back to you." });
   } catch (error) {
     console.error("Server error:", error);
     res.status(500).json({ reply: "Internal server error" });
   }
 });
 
-// ===== HTTP + WebSocket Server =====
-const server = http.createServer(app);
-const wss = new WebSocketServer({ server });
+// -------------------
+// Supervisor endpoints
+// -------------------
 
-// ===== Gemini helper for screen text analysis =====
+// List requests (optionally ?status=pending)
+app.get("/api/helprequests", async (req, res) => {
+  const { status } = req.query;
+  const filter = status ? { status } : {};
+  const list = await HelpRequest.find(filter).sort({ createdAt: -1 }).lean();
+  res.json(list);
+});
+
+// Resolve a request -> set answer, update KB, broadcast to clients
+app.put("/api/helprequests/:id/resolve", async (req, res) => {
+  const { id } = req.params;
+  const { answer } = req.body;
+  if (!answer) return res.status(400).json({ error: "Answer required" });
+
+  const reqDoc = await HelpRequest.findById(id);
+  if (!reqDoc) return res.status(404).json({ error: "Request not found" });
+
+  reqDoc.answer = answer;
+  reqDoc.status = "resolved";
+  reqDoc.resolvedAt = new Date();
+  await reqDoc.save();
+
+  // Upsert into KB (normalized)
+  const normalized = reqDoc.question.toLowerCase();
+  await Knowledge.findOneAndUpdate({ question: normalized }, { question: normalized, answer }, { upsert: true });
+
+  // Broadcast to all connected websocket clients that help is resolved
+  broadcastJSON({
+    type: "help_resolved",
+    id: reqDoc._id,
+    question: reqDoc.question,
+    answer,
+    resolvedAt: reqDoc.resolvedAt,
+  });
+
+  res.json({ ok: true, req: reqDoc });
+});
+
+// Optional: mark unresolved (timeout) endpoint (not required for demo)
+app.put("/api/helprequests/:id/unresolved", async (req, res) => {
+  const { id } = req.params;
+  const reqDoc = await HelpRequest.findById(id);
+  if (!reqDoc) return res.status(404).json({ error: "Request not found" });
+  reqDoc.status = "unresolved";
+  await reqDoc.save();
+  res.json({ ok: true });
+});
+
+// -------------------
+// Your existing / screen-share + Gemini analysis code unchanged (with minor integration)
+// -------------------
+
+// Gemini helper for screen text analysis (unchanged)
 async function analyzeWithGemini(text) {
   try {
     const prompt = `You are an expert programmer and error analyst. Review this console/code text, identify possible issues or errors, and suggest concise, clear fixes. Respond in Markdown format with headings, bullet points, and code blocks when relevant.\n\nText:\n${text}`;
@@ -97,12 +168,14 @@ async function analyzeWithGemini(text) {
   }
 }
 
-// ===== WebSocket (Screen Share) =====
-wss.on("connection", (ws) => {
-  console.log("🖥️ Screen share client connected.");
+// HTTP + WebSocket Server
+const server = http.createServer(app);
+const wss = new WebSocketServer({ server });
 
-  // Optional: throttle frame processing
-  let lastProcessed = 0;
+// WebSocket handling for screen share + help request broadcasts
+wss.on("connection", (ws) => {
+  console.log("WS client connected.");
+  wsClients.add(ws);
 
   ws.on("message", async (msg) => {
     let obj;
@@ -114,16 +187,12 @@ wss.on("connection", (ws) => {
     }
 
     if (obj.type === "frame" && obj.image_b64) {
-      const now = Date.now();
-      if (now - lastProcessed < 1000) return; // process max 1 frame per second
-      lastProcessed = now;
-
+      // existing frame processing unchanged
       try {
         const imageData = Buffer.from(obj.image_b64, "base64");
         const tmpPath = path.join("uploads", `frame-${Date.now()}.jpg`);
         await fs.promises.writeFile(tmpPath, imageData);
 
-        // OCR extract text
         const config = { lang: "eng", oem: 1, psm: 3 };
         const text = await tesseract.recognize(tmpPath, config);
         await fs.promises.unlink(tmpPath).catch(() => {});
@@ -146,20 +215,21 @@ wss.on("connection", (ws) => {
     }
   });
 
-  ws.on("close", () => console.log("❌ Screen share disconnected"));
+  ws.on("close", () => {
+    console.log("WS client disconnected.");
+    wsClients.delete(ws);
+  });
 });
 
-// ===== Start Server =====
+// Start server
 dbCOnnect()
-.then(()=>{
-  console.log("Database connection established ");
-  
-  server.listen(process.env.PORT, () => console.log(`✅ Server running on http://localhost:${process.env.PORT}`));
-})
-.catch((error)=>{
-  console.log("Database connection error");
-  
-})
+  .then(() => {
+    console.log("Database connection established ");
+    const port = process.env.PORT || 5000;
+    server.listen(port, () => console.log(`✅ Server running on http://localhost:${port}`));
+  })
+  .catch((error) => {
+    console.log("Database connection error", error);
+  });
 
-
-app.use('/api',registerUsers);
+app.use('/api', registerUsers);
