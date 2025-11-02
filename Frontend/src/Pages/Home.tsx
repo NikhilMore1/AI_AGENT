@@ -92,7 +92,7 @@ export default function Home() {
   // ===== WebSocket: connect to your backend for screen-share + help notifications =====
   useEffect(() => {
     // change host if needed
-    const socket = new WebSocket("ws://agent-backend-pocx.onrender.com");
+    const socket = new WebSocket("ws://https://agent-backend-pocx.onrender.com");
     setWs(socket);
 
     socket.onopen = () => console.log("WS connected");
