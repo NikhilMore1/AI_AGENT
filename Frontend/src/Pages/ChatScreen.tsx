@@ -24,7 +24,7 @@ const ChatScreen = () => {
   // 🧾 Step 1: Save current chat (if not empty)
   if (current && current.messages.length > 0) {
     try {
-      await fetch("http://localhost:5000/api/save-chat", {
+      await fetch("https://agent-backend-pocx.onrender.com/api/save-chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
