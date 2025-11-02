@@ -92,7 +92,7 @@ export default function Home() {
   // ===== WebSocket: connect to your backend for screen-share + help notifications =====
   useEffect(() => {
     // change host if needed
-    const socket = new WebSocket("ws://localhost:5000");
+    const socket = new WebSocket("ws://agent-backend-pocx.onrender.com");
     setWs(socket);
 
     socket.onopen = () => console.log("WS connected");
@@ -142,7 +142,7 @@ export default function Home() {
 
     try {
       // Send to your local backend
-      const res = await fetch("http://localhost:5000/api/chat", { method: "POST", body: formData });
+      const res = await fetch("https://agent-backend-pocx.onrender.com/api/chat", { method: "POST", body: formData });
       const data = await res.json();
       const fullText = typeof data.reply === "string" ? data.reply : JSON.stringify(data.reply, null, 2);
 
@@ -210,7 +210,7 @@ export default function Home() {
   const fetchRequests = async () => {
     setLoadingRequests(true);
     try {
-      const res = await fetch("http://localhost:5000/api/helprequests?status=pending");
+      const res = await fetch("https://agent-backend-pocx.onrender.com/api/helprequests?status=pending");
       const list = await res.json();
       setRequests(list);
     } catch (e) {
@@ -226,7 +226,7 @@ export default function Home() {
       return;
     }
     try {
-      const res = await fetch(`http://localhost:5000/api/helprequests/${id}/resolve`, {
+      const res = await fetch(`https://agent-backend-pocx.onrender.com/api/helprequests/${id}/resolve`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ answer: answerText }),
