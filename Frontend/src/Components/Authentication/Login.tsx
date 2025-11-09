@@ -35,6 +35,7 @@ const handleSubmit = async (e: React.FormEvent) => {
     });
     console.log("✅ Response:", response.data);
     alert("login successful!");
+    localStorage.setItem("token",response.data.token);
     navigate("/chat");
   } catch (error: any) {
     console.error("❌ Error Response:", error.response?.data);
