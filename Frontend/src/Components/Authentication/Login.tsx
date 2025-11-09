@@ -19,6 +19,10 @@ const Login = () => {
     setSuccess("");
   };
 
+  const navigateToRegister = () =>{
+    navigate("/Registration");
+  }
+
   // Handle form submission
 const handleSubmit = async (e: React.FormEvent) => {
   e.preventDefault();
@@ -101,6 +105,7 @@ const handleSubmit = async (e: React.FormEvent) => {
           >
             Login
           </button>
+          <button className="text-sm text-center ml-25 text-shadow-blue-600 text-blue-700 font-bold stroke-yellow-50 animate-pulse cursor-pointer" onClick={navigateToRegister}>Not Register yet? Register</button>
         </form>
       </div>
     </div>

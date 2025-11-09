@@ -30,9 +30,9 @@
             console.log(resp);
             
 
-        }catch(error){
-            res.status(500).json({
-                message:"Internal server error", 
+        }catch(error){ 
+            res.status(500).json({ 
+                message:"Internal server error in reg controller", 
                 error:error.message
             })
             console.log("Server error in registration");

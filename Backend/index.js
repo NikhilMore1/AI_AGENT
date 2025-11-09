@@ -1,4 +1,6 @@
-// index.js (replace existing)
+
+
+
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
@@ -9,143 +11,73 @@ import { WebSocketServer } from "ws";
 import tesseract from "node-tesseract-ocr";
 import fs from "fs";
 import path from "path";
-import mongoose from "mongoose";
-import dbCOnnect from "./Connections/dbConnection.js"; // your existing DB connection
+import dbCOnnect from "./Connections/dbConnection.js";
 dotenv.config();
 import registerUsers from './Routes/auth/Registration.routes.js';
+import ChatModel from "./Models/Chat.models.js";
 
-const app = express();
+const app = express() ;
 app.use(cors());
 app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.urlencoded({extended:true}));
 
-// Multer
+// ===== Multer setup for file uploads =====
 const upload = multer({ dest: "uploads/" });
 
-// -------------------
-// Mongo Models (inline for simplicity)
-// -------------------
-const helpRequestSchema = new mongoose.Schema({
-  question: String,
-  answer: { type: String, default: null },
-  status: { type: String, default: "pending" }, // pending | resolved | unresolved
-  createdAt: { type: Date, default: Date.now },
-  resolvedAt: Date,
-});
-
-const kbSchema = new mongoose.Schema({
-  question: { type: String, unique: true },
-  answer: String,
-  createdAt: { type: Date, default: Date.now },
-});
-
-const HelpRequest = mongoose.models.HelpRequest || mongoose.model("HelpRequest", helpRequestSchema);
-const Knowledge = mongoose.models.Knowledge || mongoose.model("Knowledge", kbSchema);
-
-// -------------------
-// Helper: broadcast to all WS clients
-// -------------------
-let wsClients = new Set();
-function broadcastJSON(obj) {
-  const str = JSON.stringify(obj);
-  for (const ws of wsClients) {
-    if (ws.readyState === ws.OPEN) ws.send(str);
-  }
-}
-
-// -------------------
-// Chat endpoint: check KB first, then fallback to Gemini
-// -------------------
+// ===== Normal Chat Endpoint =====
 app.post("/api/chat", upload.single("file"), async (req, res) => {
   try {
-    const message = (req.body.message || "").trim();
+    const message = req.body.message || "";
     const file = req.file;
 
-    if (!message && !file) return res.status(400).json({ reply: "Empty request" });
+    console.log("Text:", message);
+    console.log("File:", file?.originalname || "No file");
 
-    // Check KB (case-insensitive match on a normalized question)
-    const normalized = message.toLowerCase();
-    const kbEntry = await Knowledge.findOne({ question: normalized });
-    if (kbEntry) {
-      return res.json({ reply: kbEntry.answer });
-    }
+    // Prepare prompt for Gemini
+    let prompt = message;
+    if (file) prompt += `\nUser uploaded a file: ${file.originalname}`;
 
-    // If file present, you may add analysis here (kept simple)
-    // Not found in KB -> create help request and reply with escalation message
-    const newReq = await HelpRequest.create({ question: message });
-    console.log("Created help request:", newReq._id, message);
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [
+            {
+              role: "user",
+              parts: [
+                {
+                  text: `${prompt}\n\nPlease format your response using Markdown (use headings, bold, bullet points, and code blocks only when relevant). Respond concisely and clearly. make sure not tell unnessery your build info such as your developer or google name ` ,
+                },
+              ],
+            },
+          ],
+        }),
+      }
+    );
 
-    // Simulate notifying supervisor (console + broadcast)
-    console.log(`Notify supervisor: Hey, I need help answering: "${message}"`);
-    broadcastJSON({ type: "new_help_request", id: newReq._id, question: newReq.question, createdAt: newReq.createdAt });
+    const data = await response.json();
+    const reply =
+      data?.candidates?.[0]?.content?.parts?.[0]?.text ||
+      data?.candidates?.[0]?.content?.[0]?.text ||
+      "⚠️ No valid response from Gemini.";
 
-    return res.json({ reply: "Let me check with my supervisor and get back to you." });
+    res.json({ reply });
   } catch (error) {
     console.error("Server error:", error);
     res.status(500).json({ reply: "Internal server error" });
   }
 });
 
-// -------------------
-// Supervisor endpoints
-// -------------------
+// ===== HTTP + WebSocket Server =====
+const server = http.createServer(app);
+const wss = new WebSocketServer({ server });
 
-// List requests (optionally ?status=pending)
-app.get("/api/helprequests", async (req, res) => {
-  const { status } = req.query;
-  const filter = status ? { status } : {};
-  const list = await HelpRequest.find(filter).sort({ createdAt: -1 }).lean();
-  res.json(list);
-});
-
-// Resolve a request -> set answer, update KB, broadcast to clients
-app.put("/api/helprequests/:id/resolve", async (req, res) => {
-  const { id } = req.params;
-  const { answer } = req.body;
-  if (!answer) return res.status(400).json({ error: "Answer required" });
-
-  const reqDoc = await HelpRequest.findById(id);
-  if (!reqDoc) return res.status(404).json({ error: "Request not found" });
-
-  reqDoc.answer = answer;
-  reqDoc.status = "resolved";
-  reqDoc.resolvedAt = new Date();
-  await reqDoc.save();
-
-  // Upsert into KB (normalized)
-  const normalized = reqDoc.question.toLowerCase();
-  await Knowledge.findOneAndUpdate({ question: normalized }, { question: normalized, answer }, { upsert: true });
-
-  // Broadcast to all connected websocket clients that help is resolved
-  broadcastJSON({
-    type: "help_resolved",
-    id: reqDoc._id,
-    question: reqDoc.question,
-    answer,
-    resolvedAt: reqDoc.resolvedAt,
-  });
-
-  res.json({ ok: true, req: reqDoc });
-});
-
-// Optional: mark unresolved (timeout) endpoint (not required for demo)
-app.put("/api/helprequests/:id/unresolved", async (req, res) => {
-  const { id } = req.params;
-  const reqDoc = await HelpRequest.findById(id);
-  if (!reqDoc) return res.status(404).json({ error: "Request not found" });
-  reqDoc.status = "unresolved";
-  await reqDoc.save();
-  res.json({ ok: true });
-});
-
-// -------------------
-// Your existing / screen-share + Gemini analysis code unchanged (with minor integration)
-// -------------------
-
-// Gemini helper for screen text analysis (unchanged)
+// ===== Gemini helper for screen text analysis =====
 async function analyzeWithGemini(text) {
   try {
-    const prompt = `You are an expert programmer and error analyst. Review this console/code text, identify possible issues or errors, and suggest concise, clear fixes. Respond in Markdown format with headings, bullet points, and code blocks when relevant.\n\nText:\n${text}`;
+    const prompt = `You are an expert programmer and error analyst. Review this console/code text, identify possible issues or errors, and suggest concise, clear fixes. Respond in Markdown format with headings, bullet points, and code blocks when relevant .\n\nText:\n${text}`;
 
     const res = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
@@ -168,14 +100,12 @@ async function analyzeWithGemini(text) {
   }
 }
 
-// HTTP + WebSocket Server
-const server = http.createServer(app);
-const wss = new WebSocketServer({ server });
-
-// WebSocket handling for screen share + help request broadcasts
+// ===== WebSocket (Screen Share) =====
 wss.on("connection", (ws) => {
-  console.log("WS client connected.");
-  wsClients.add(ws);
+  console.log("🖥️ Screen share client connected.");
+
+  // Optional: throttle frame processing
+  let lastProcessed = 0;
 
   ws.on("message", async (msg) => {
     let obj;
@@ -187,12 +117,16 @@ wss.on("connection", (ws) => {
     }
 
     if (obj.type === "frame" && obj.image_b64) {
-      // existing frame processing unchanged
+      const now = Date.now();
+      if (now - lastProcessed < 1000) return; // process max 1 frame per second
+      lastProcessed = now;
+
       try {
         const imageData = Buffer.from(obj.image_b64, "base64");
         const tmpPath = path.join("uploads", `frame-${Date.now()}.jpg`);
         await fs.promises.writeFile(tmpPath, imageData);
 
+        // OCR extract text
         const config = { lang: "eng", oem: 1, psm: 3 };
         const text = await tesseract.recognize(tmpPath, config);
         await fs.promises.unlink(tmpPath).catch(() => {});
@@ -215,21 +149,46 @@ wss.on("connection", (ws) => {
     }
   });
 
-  ws.on("close", () => {
-    console.log("WS client disconnected.");
-    wsClients.delete(ws);
-  });
+  ws.on("close", () => console.log("❌ Screen share disconnected"));
 });
 
-// Start server
+// ===== Start Server =====   
 dbCOnnect()
-  .then(() => {
-    console.log("Database connection established ");
-    const port = process.env.PORT || 5000;
-    server.listen(port, () => console.log(`✅ Server running on http://localhost:${port}`));
-  })
-  .catch((error) => {
-    console.log("Database connection error", error);
-  });
+.then(()=>{
+  console.log("Database connection established ");
+  server.listen(process.env.PORT, () => console.log(`✅ Server running on http://localhost:${process.env.PORT}`));
+})
+.catch((error)=>{
+  console.log("Database connection error");
+  
+})
 
-app.use('/api', registerUsers);
+
+// ------------------ Chat Save Endpoint ------------------
+app.post("/api/save-chat", async (req, res) => {
+  try {
+    const { chatId, title, messages } = req.body;
+
+    if (!chatId || !messages) {
+      return res.status(400).json({ error: "Invalid chat data" });
+    }
+
+    // Save or update chat
+    const savedChat = await ChatModel.findOneAndUpdate(
+      { chatId },
+      { title, messages },
+      { new: true, upsert: true } // create if not exists
+    );
+
+    console.log("Chat saved successfully:", savedChat);
+
+    res.json({ success: true, chat: savedChat });
+  } catch (err) {
+    console.error("Save chat error:", err.message);
+    res.status(500).json({ error: "Server error in chat" },err.message);
+  }
+});
+
+
+app.use('/api',registerUsers);
+

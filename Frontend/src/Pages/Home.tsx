@@ -159,7 +159,7 @@ export default function Home() {
       <h1 className="text-3xl sm:text-4xl font-extrabold text-center text-purple-400 mb-4 drop-shadow-lg tracking-wide">
         <span className="text-pink-400">VibeCoder</span> AI Assistant 🤖
       </h1>
-
+      <p className="text-center font-light text-white ">Welcome <span className="font-bold animate-pulse text-pink-600">{localStorage.getItem("Name")}</span> how can I help you</p>
       {/* Chat Container */}
       <div className="flex-1 overflow-y-auto rounded-3xl bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 p-3 sm:p-5 shadow-lg border border-gray-700 space-y-3 sm:space-y-4">
         {messages.map((msg, idx) => (

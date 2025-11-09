@@ -1,6 +1,6 @@
 import axios from "axios";
 import React, { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { data, useNavigate } from "react-router-dom";
 
 const Registration = () => {
   const navigate = useNavigate();
@@ -21,6 +21,11 @@ const Registration = () => {
     setSuccess("");
   };
 
+  const navigateToLogin = () =>{
+    navigate("/Login");
+
+  }
+
   // Handle form submission
 const handleSubmit = async (e: React.FormEvent) => {
   e.preventDefault();
@@ -33,7 +38,9 @@ const handleSubmit = async (e: React.FormEvent) => {
     });
     console.log("✅ Response:", response.data);
     alert("Registration successful!");
+    localStorage.setItem("Name",datas.userName);
     navigate("/login");
+
   } catch (error: any) {
     console.error("❌ Error Response:", error.response?.data);
     alert(error.response?.data?.message || "Registration failed!");
@@ -129,6 +136,7 @@ const handleSubmit = async (e: React.FormEvent) => {
           >
             Register
           </button>
+           <button className="text-sm text-center ml-25 text-shadow-blue-600 text-blue-700 font-bold stroke-yellow-50 animate-pulse cursor-pointer" onClick={navigateToLogin}>Already Register? Login</button>
         </form>
       </div>
     </div>
