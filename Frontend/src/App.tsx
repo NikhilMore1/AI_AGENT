@@ -1,17 +1,19 @@
 import React from 'react'
-import { BrowserRouter, Route, Routes } from 'react-router-dom'
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import Home from './Pages/Home'
 import ChatScreen from './Pages/ChatScreen'
 import Registration from './Components/Authentication/Registration'
 import Login from './Components/Authentication/Login'
 
 function App() {
+  const token = localStorage.getItem("token");
   return (
     <>
     <BrowserRouter>
     <Routes>
+       <Route path='/' element={token ?<Navigate to="/Chat" /> :<Navigate to="/Login" />} />
+       <Route path='/Registration' element={<Registration/>} />
       <Route path='/Login' element={<Login/>} />
-      <Route path='/' element={<Registration/>} />
       <Route path='/Chat' element={<ChatScreen/>} />
     </Routes>
     </BrowserRouter>
